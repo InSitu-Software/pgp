@@ -11,9 +11,7 @@ import (
 	"golang.org/x/crypto/openpgp"
 )
 
-/*
-	Converts a pgp key passed as a string to an openpgp.Entity
-*/
+// getEntity converts a pgp key passed as a string to an openpgp.Entity
 func getEntity(key string) (*openpgp.Entity, error) {
 	strReader := strings.NewReader(key)
 
@@ -26,9 +24,7 @@ func getEntity(key string) (*openpgp.Entity, error) {
 	return entity, err
 }
 
-/*
-	Looks up all recipients in the array, in the DB and returns their public PGP Key in a string array (keys are stored armored).
-*/
+// retrievePubKeysFromDB Looks up all recipients in the array, in the DB and returns their public PGP Key in a string array (keys are stored armored).
 func retrievePubKeysFromDB(recipients []string) ([]string, error) {
 	var pubKeys []string
 
@@ -56,9 +52,7 @@ func retrievePubKeysFromDB(recipients []string) ([]string, error) {
 	return pubKeys, nil
 }
 
-/*
-	pubKeys holds armored public PGP keys which get translated to openpgp.Entities, needed for the Encryption
-*/
+// preparePGPEntities pubKeys holds armored public PGP keys which get translated to openpgp.Entities, needed for the Encryption
 func preparePGPEntities(pubKeys []string) ([]*openpgp.Entity, error) {
 	var entities []*openpgp.Entity
 
@@ -75,7 +69,7 @@ func preparePGPEntities(pubKeys []string) ([]*openpgp.Entity, error) {
 	return entities, nil
 }
 
-// Result is armored
+// SigPGP Result is armored
 func SigPGP(message []byte, signer string, password string) ([]byte, error) {
 	var signatureKey string
 	err := database.Connection.QueryRowx("SELECT private FROM employeeapp.crypto_keys WHERE id=$1", signer).Scan(&signatureKey)
@@ -109,7 +103,7 @@ func SigPGP(message []byte, signer string, password string) ([]byte, error) {
 
 }
 
-// Result is armored PGP
+// Encrypt Result is armored PGP
 func Encrypt(messageToEncrypt []byte, recipients []string) (string, error) {
 
 	pubKeys, err := retrievePubKeysFromDB(recipients)
