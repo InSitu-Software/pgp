@@ -2,27 +2,46 @@ package pgp
 
 import (
 	"bytes"
-	"strings"
+	"io"
 
 	"gitlab.insitu.de/golang/database"
-	"golang.org/x/crypto/openpgp/armor"
-	"golang.org/x/crypto/openpgp/packet"
-
 	"golang.org/x/crypto/openpgp"
+	"golang.org/x/crypto/openpgp/armor"
 )
 
-// getEntity converts a pgp key passed as a string to an openpgp.Entity
-func getEntity(key string) (*openpgp.Entity, error) {
-	strReader := strings.NewReader(key)
+// KeyProvider returns a plain text armored pgp usable key.
+// parameter scope is either public or private - indicates the usage of the key.
+type KeyProvider func(recipientEMail string, scope string) (string, error)
 
-	block, err := armor.Decode(strReader)
+func Encrypt(plainMessage io.WriterTo, recipientMails []string, keyProvider KeyProvider) (io.WriterTo, error) {
+	// we have to scope public, since we want to encrypt against the public keys of given recipient
+	entities, err := getEntitiesByKeyProvider(recipientMails, keyProvider, "public")
 	if err != nil {
 		return nil, err
 	}
 
-	entity, err := openpgp.ReadEntity(packet.NewReader(block.Body))
-	return entity, err
+	buf := new(bytes.Buffer)
+	msg, err := armor.Encode(buf, "PGP MESSAGE", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer msg.Close()
+
+	w, err := openpgp.Encrypt(msg, entities, nil, &openpgp.FileHints{IsBinary: true}, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer w.Close()
+
+	_, err = plainMessage.WriteTo(w)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
+
+// / OLD
 
 // retrievePubKeysFromDB Looks up all recipients in the array, in the DB and returns their public PGP Key in a string array (keys are stored armored).
 func retrievePubKeysFromDB(recipients []string) ([]string, error) {
@@ -33,7 +52,7 @@ func retrievePubKeysFromDB(recipients []string) ([]string, error) {
 		return nil, err
 	}
 
-	query := "SELECT pgpKey FROM employeeapp.keysPGP WHERE recipient=$1"
+	query := "SELECT pgpkey FROM employeeapp.keyspgp WHERE recipient=$1"
 	for _, recp := range recipients {
 		var pubKey string
 
@@ -104,8 +123,7 @@ func SigPGP(message []byte, signer string, password string) ([]byte, error) {
 }
 
 // Encrypt Result is armored PGP
-func Encrypt(messageToEncrypt []byte, recipients []string) (string, error) {
-
+func OldEncrypt(messageToEncrypt []byte, recipients []string) (string, error) {
 	pubKeys, err := retrievePubKeysFromDB(recipients)
 	if err != nil {
 		return "", err
