@@ -6,11 +6,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"os"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/InSitu-Software/mail"
 	"github.com/stretchr/testify/assert"
 	"gitlab.insitu.de/golang/database"
 	"golang.org/x/crypto/openpgp"
@@ -389,37 +387,37 @@ func (f *f) WriteTo(writer io.Writer) (int64, error) {
 }
 
 func Test_Encrypt(t *testing.T) {
-	to := []string{"sebastian.gabbert@insitu.de"}
-
-	// var testString f
-	// testString = "test"
+	// to := []string{"sebastian.gabbert@insitu.de"}
 	//
+	// // var testString f
+	// // testString = "test"
+	// //
+	// //
+	// // e, _ := Encrypt(&testString, to, mockPublicProvider)
+	// // e.WriteTo(os.Stdout)
+	// // return
+	// //
+	// //
+	// //
 	//
-	// e, _ := Encrypt(&testString, to, mockPublicProvider)
-	// e.WriteTo(os.Stdout)
-	// return
+	// from := "sender@sender.de"
 	//
+	// pgpWriter := MailWriter{
+	// 	KeyProvider: mockPublicProvider,
+	// 	To:          to,
+	// }
 	//
+	// secretMail := mail.NewMessage()
+	// secretMail.SetHeader("To", to...)
+	// secretMail.SetHeader("From", from)
+	// secretMail.SetHeader("Subject", "my secret mail subject")
+	// secretMail.SetBody("text/plain", "my darkest secret is *#12!4//(+")
+	// secretMail.SetEncrypted(
+	// 	"application/pgp-encrypted",
+	// 	"application/octet-stream",
+	// 	"Version: 1",
+	// 	&pgpWriter,
+	// )
 	//
-
-	from := "sender@sender.de"
-
-	pgpWriter := MailWriter{
-		KeyProvider: mockPublicProvider,
-		To:          to,
-	}
-
-	secretMail := mail.NewMessage()
-	secretMail.SetHeader("To", to...)
-	secretMail.SetHeader("From", from)
-	secretMail.SetHeader("Subject", "my secret mail subject")
-	secretMail.SetBody("text/plain", "my darkest secret is *#12!4//(+")
-	secretMail.SetEncrypted(
-		"application/pgp-encrypted",
-		"application/octet-stream",
-		"Version: 1",
-		&pgpWriter,
-	)
-
-	secretMail.WriteTo(os.Stdout)
+	// secretMail.WriteTo(os.Stdout)
 }
