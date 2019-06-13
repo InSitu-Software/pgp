@@ -37,7 +37,7 @@ func Test_getEntitiesByKeyProvider(t *testing.T) {
 
 // Just a small test to see if the right entity was returned (the Identity is checked)
 func Test_getEntity(t *testing.T) {
-	entity, err := getEntity(qwertPub)
+	entity, err := newEntity(qwertPub)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func Test_getEntity(t *testing.T) {
 	_, ok := entity.Identities["qwert <qwert@mail.xy>"]
 	assert.Equal(t, ok, true)
 
-	entity, err = getEntity(qwertPrivate)
+	entity, err = newEntity(qwertPrivate)
 	if err != nil {
 		log.Fatal(err)
 	}
