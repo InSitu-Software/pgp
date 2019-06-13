@@ -8,12 +8,10 @@ import (
 	"log"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
-	"gitlab.insitu.de/golang/database"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/armor"
 	"golang.org/x/crypto/openpgp/packet"
-	"gopkg.in/go-playground/assert.v1"
 )
 
 const qwertPub = `-----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -143,73 +141,13 @@ kshMdYAFhKoilz3bywyX6dgmKBhBHWOZRmai8sGB2Qb2+NfSiSEkCqYpv902TuzO
 -----END PGP PRIVATE KEY BLOCK-----`
 
 const pass = "qwert123"
-
-// Just a small test to see if the right entity was returned (the Identity is checked)
-func TestGetEntity(t *testing.T) {
-	entity, err := getEntity(qwertPub)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, ok := entity.Identities["qwert <qwert@mail.xy>"]
-	assert.Equal(t, ok, true)
-
-	entity, err = getEntity(qwertPrivate)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, ok = entity.Identities["qwert <qwert@mail.xy>"]
-	assert.Equal(t, ok, true)
-}
-
-func TestRetrievePubKeysFromDB(t *testing.T) {
-	_, mock, err := database.NewMock()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	recipients := []string{"testa@gmx.de", "testb@gmail.com", "testc@mail.ru"}
-
-	var rows [3]*sqlmock.Rows
-	rows[0] = sqlmock.NewRows([]string{"pgpKey"}).AddRow("---PGP MESSAGE--- herp ---PGP MESSAGE---")
-	rows[1] = sqlmock.NewRows([]string{"pgpKey"}).AddRow("---PGP MESSAGE--- derp ---PGP MESSAGE---")
-	rows[2] = sqlmock.NewRows([]string{"pgpKey"}).AddRow("---PGP MESSAGE--- serp ---PGP MESSAGE---")
-
-	mock.ExpectBegin()
-
-	for i := 0; i < len(recipients); i++ {
-		mock.ExpectQuery("^SELECT pgpKey FROM employeeapp.keysPGP WHERE recipient=(.+)").WithArgs(recipients[i]).WillReturnRows(rows[i])
-	}
-
-	mock.ExpectCommit()
-
-	res, err := retrievePubKeysFromDB(recipients)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	assert.Equal(t, len(res), 3)
-	assert.Equal(t, "---PGP MESSAGE--- herp ---PGP MESSAGE---", res[0])
-	assert.Equal(t, "---PGP MESSAGE--- derp ---PGP MESSAGE---", res[1])
-	assert.Equal(t, "---PGP MESSAGE--- serp ---PGP MESSAGE---", res[2])
-}
-
-// This test probably needs more love, since at this point in time, it is only tested if the number of the entities equals the number of the public keys
-func TestPreparePGPEntities(t *testing.T) {
-	pubKeys := []string{qwertPub, qwertPub}
-
-	entities, err := preparePGPEntities(pubKeys)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	assert.Equal(t, len(entities), len(pubKeys))
-}
+const recipientMail = "qwert@mail.xy"
+const senderMail = "qwert@mail.xy"
 
 // Decrypt takes an armored (human readable) message which is later decoded
 func Decrypt(encryptedMsg string) (string, error) {
-	entity, err := getEntity(qwertPrivate)
+
+	entity, err := getSingleEntity(recipientMail, mockPublicProvider, "private", nil)
 	if err != nil {
 		return "", err
 	}
@@ -248,10 +186,8 @@ func Decrypt(encryptedMsg string) (string, error) {
 }
 
 // This is verification magic, taken from here: https://github.com/jchavannes/go-pgp/blob/master/pgp/verify.go
-func verifySignature(sig []byte) (*packet.Signature, error) {
-
-	sigReader := bytes.NewReader(sig)
-	block, err := armor.Decode(sigReader)
+func verifySignature(sig io.Reader, publicKey *openpgp.Entity) (*packet.Signature, error) {
+	block, err := armor.Decode(sig)
 	if err != nil {
 		return nil, err
 	}
@@ -276,71 +212,40 @@ func verifySignature(sig []byte) (*packet.Signature, error) {
 
 func TestSign(t *testing.T) {
 	testMessage := "Hello World signed!"
+	messageWriter := bytes.NewBufferString(testMessage)
 
-	_, mock, err := database.NewMock()
+	signatureWriter, err := Sign(messageWriter, senderMail, mockPublicProvider, bytes.NewBufferString(pass).Bytes())
 	if err != nil {
 		t.Error(err)
 	}
-
-	var rows [1]*sqlmock.Rows
-	rows[0] = sqlmock.NewRows([]string{"pgpKey"}).AddRow(qwertPrivate)
-	mock.ExpectQuery("^SELECT private FROM employeeapp.crypto_keys WHERE id=(.+)").WithArgs("qwert@mail.xy").WillReturnRows(rows[0])
-
-	signature, err := SigPGP([]byte(testMessage), "qwert@mail.xy", pass)
-	if err != nil {
-		log.Fatal(err)
+	var signatureBuffer bytes.Buffer
+	if _, err := signatureWriter.WriteTo(&signatureBuffer); err != nil {
+		t.Error(err)
 	}
 
-	publicQwertEnt, err := getEntity(qwertPub)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	sig, err := verifySignature(signature)
-	if err != nil {
-		log.Fatal(err)
-	}
-	hash := sig.Hash.New()
-	messageReader := bytes.NewReader([]byte(testMessage))
-	io.Copy(hash, messageReader)
-
-	publicQwertEnt.PrimaryKey.VerifySignature(hash, sig)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	// TODO
 }
 
 func TestEncrypt(t *testing.T) {
 
-	message := "Hello World!"
-	recipients := []string{"qwert@mail.xy"}
+	recipients := []string{recipientMail}
+	msg := "Hello World"
+	messageWriter := bytes.NewBufferString(msg)
 
-	_, mock, err := database.NewMock()
+	encMsgWriter, err := Encrypt(messageWriter, recipients, mockPublicProvider)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var rows [1]*sqlmock.Rows
-	rows[0] = sqlmock.NewRows([]string{"pgpKey"}).AddRow(qwertPub)
-
-	mock.ExpectBegin()
-
-	for i := 0; i < len(recipients); i++ {
-		mock.ExpectQuery("^SELECT pgpKey FROM employeeapp.keysPGP WHERE recipient=(.+)").WithArgs(recipients[i]).WillReturnRows(rows[i])
+	var encMsgBuffer bytes.Buffer
+	if _, err := encMsgWriter.WriteTo(&encMsgBuffer); err != nil {
+		t.Error(err)
 	}
 
-	mock.ExpectCommit()
-	encMsg, err := Encrypt([]byte(message), recipients)
+	decrypted, err := Decrypt(encMsgBuffer.String())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	decrypted, err := Decrypt(encMsg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	assert.Equal(t, message, decrypted)
-
+	assert.Equal(t, msg, decrypted)
 }
