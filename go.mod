@@ -1,4 +1,4 @@
-module gitlab.insitu.de/golang/pgp
+module github.com/InSitu-Software/pgp
 
 go 1.12
 
